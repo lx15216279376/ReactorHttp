@@ -91,7 +91,7 @@ int eventActivate(struct EventLoop* evLoop, int fd, int event)
 	return 0;
 }
 
-int eventLoopAddTask(struct EventLoop* evLoop, Channel* channel, int type)
+int eventLoopAddTask(struct EventLoop* evLoop, struct Channel* channel, int type)
 {
 	// 加锁，保护共享资源（任务队列）
 	pthread_mutex_lock(&evLoop->mutex);
@@ -146,20 +146,17 @@ int eventLoopProcessTask(struct EventLoop* evLoop)
 		if(head->type == ADD)
 		{
 			// 添加
-			evLoop->dispatcher->add(channel, evLoop);
-			channelMapInsert(evLoop->channelMap, channel);
+			eventLoopAdd(evLoop, channel);
 		}
 		else if(head->type == DELETE)
 		{
 			// 删除
-			evLoop->dispatcher->del(channel, evLoop);
-			channelMapRemove(evLoop->channelMap, channel->fd);
-			channelFree(channel);
+			eventLoopRemove(evLoop, channel);
 		}
 		else if(head->type == MODIFY)
 		{
 			// 修改
-			evLoop->dispatcher->modify(channel, evLoop);
+			eventLoopModify(evLoop, channel);
 		}
 		struct ChannelElement* temp = head;
 		head = head->next;
@@ -167,5 +164,63 @@ int eventLoopProcessTask(struct EventLoop* evLoop)
 	}
 	evLoop->head = evLoop->tail = NULL; // 清空任务队列
 	pthread_mutex_unlock(&evLoop->mutex);
+	return 0;
+}
+
+int eventLoopAdd(struct EventLoop* evLoop, struct Channel* channel)
+{
+	int fd = channel->fd;
+	struct ChannelMap* channelMap = evLoop->channelMap;
+	if(fd >= channelMap->size)
+	{
+		// 扩展channelMap
+		if(!makeMapRoom(channelMap,fd,sizeof(struct Channel*)))
+		{
+			return -1;
+		}
+	}
+
+	if(channelMap->list[fd] == NULL)
+	{
+		channelMap->list[fd] = channel;
+		evLoop->dispatcher->add(channel, evLoop);
+	}
+	return 0;
+}
+
+int eventLoopRemove(struct EventLoop* evLoop, struct Channel* channel)
+{
+	int fd = channel->fd;
+	struct ChannelMap* channelMap = evLoop->channelMap;
+	if (fd >= channelMap->size)
+	{
+		return -1;
+	}
+
+	int ret = evLoop->dispatcher->remove(channel, evLoop);
+	return ret;
+}
+
+int deatroyChannel(struct EventLoop* evLoop,struct Channel* channel)
+{
+	// 删除channel和fd的对应关系
+	evLoop->channelMap->list[channel->fd] = NULL;
+	// 关闭fd
+	close(channel->fd);
+	// 释放channel
+	free(channel);
+	return 0;
+}
+
+int eventLoopModify(struct EventLoop* evLoop,struct Channel* channel)
+{
+	int fd = channel->fd;
+	struct ChannelMap* channelMap = evLoop->channelMap;
+	if (fd >= channelMap->size)
+	{
+		return -1;
+	}
+
+	int ret = evLoop->dispatcher->modify(channel, evLoop);
 	return 0;
 }

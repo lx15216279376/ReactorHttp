@@ -53,3 +53,15 @@ int eventLoopAddTask(struct EventLoop* evLoop, struct Channel* channel,int type)
 
 // 处理任务队列中的任务
 int eventLoopProcessTask(struct EventLoop* evLoop);
+
+// 添加任务,将任务添加到dispatcher对应的检测集合中
+int eventLoopAdd(struct EventLoop* evLoop, struct Channel* channel);
+
+// 删除任务，将任务从dispatcher对应的检测集合中删除
+int eventLoopRemove(struct EventLoop* evLoop, struct Channel* channel);
+
+// 释放channel，即删除任务的后续处理
+int deatroyChannel(struct EventLoop* evLoop,struct Channel* channel);
+
+// 修改任务
+int eventLoopModify(struct EventLoop* evLoop, struct Channel* channel);
